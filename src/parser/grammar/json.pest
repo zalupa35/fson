@@ -1,0 +1,78 @@
+WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
+COMMENT    = _{ ("/*" ~ (!"*/" ~ ANY)* ~ "*/") | ("//" ~ (!NEWLINE ~ ANY)*) }
+
+// Identifier
+identifier = @{ LETTER+ ~ (ASCII_ALPHANUMERIC | "_" | LETTER+)* }
+
+colon      = _{ ":" }
+semicolon  = _{ ";" }
+comma      = _{ "," }
+ref_symbol = _{ "#" }
+
+// Array [..., ...]
+array = { "[" ~ value ~ (comma ~ value)* ~ comma? ~ "]" | "[" ~ "]" }
+
+// Object { "x": 1, y: 1 }
+object_pair = { (string | identifier) ~ colon ~ value }
+object      = { "{" ~ object_pair ~ (comma ~ object_pair)* ~ comma? ~ "}" | "{" ~ "}" }
+
+// Dobule quotes string
+db_quotes_str = _{ ("\"" ~ double_quotes_string ~ "\"") }
+// Single quotes string
+si_quotes_str = _{ ("'" ~ single_quotes_string ~ "'") }
+
+string = ${ db_quotes_str | si_quotes_str | ("`" ~ template_string ~ "`") }
+
+// Normal strings (" ... ", ' ... ')
+double_quotes_string = @{
+    (!("\"" | "\\") ~ ANY | escape_and_unicode)*
+}
+single_quotes_string = @{
+    (!("\'" | "\\") ~ ANY | escape_and_unicode)*
+}
+
+// Template string (` ${...} `)
+template_char          = @{
+    (!("`" | "\\") ~ ANY | escape_and_unicode)
+}
+template_string        =  { ((string_interpolation? ~ template_char ~ string_interpolation?) | string_interpolation)* }
+interpolation_template =  { "${" ~ value ~ "}" }
+string_interpolation   = _{ interpolation_template+ }
+
+// Escape (\...) and unicode (\u....)
+escape_and_unicode = {
+    "\\" ~ ("\"" | "\'" | "`" | "\\" | "/" | "b" | "f" | "n" | "r" | "t")
+  | "\\" ~ ("u" ~ ASCII_HEX_DIGIT{4})
+}
+
+// Number (1, +1, -1, 0.1)
+number = @{ ("-" | "+")? ~ (hexadecimal | (int ~ ("." ~ ASCII_DIGIT+ ~ exp? | exp)?) | infinity) }
+int    = @{ "0" | ASCII_NONZERO_DIGIT ~ ASCII_DIGIT* }
+exp    = @{ ("E" | "e") ~ ("+" | "-")? ~ ASCII_DIGIT+ }
+
+infinity    = { "Infinity" }
+hexadecimal = { "0x" ~ HEX_DIGIT+ }
+
+// Not a Number
+not_a_number = { "NaN" }
+
+// Boolean (true, false)
+boolean = { "true" | "false" }
+
+// Null
+null = { "null" }
+
+// Reference
+ref_str        = _{ (string | identifier) }
+ref_path_slash = _{ "/" }
+ref_path       =  { ref_path_slash ~ (ref_str ~ (ref_path_slash ~ ref_str)* | "") }
+reference      =  { ref_symbol ~ (ref_str | ref_path) }
+
+ref_value_id  = { ref_symbol ~ "id" ~ colon ~ (db_quotes_str | si_quotes_str) ~ semicolon }
+ref_value_val = { ref_symbol ~ "value" ~ colon ~ value ~ semicolon }
+ref_value     = { ref_symbol ~ "{" ~ ((ref_value_id ~ ref_value_val) | (ref_value_val ~ ref_value_id)) ~ "}" }
+
+value = _{ string | array | ref_value | object | boolean | number | null | reference | not_a_number }
+
+// JSON Document
+document = _{ SOI ~ value ~ EOI }
